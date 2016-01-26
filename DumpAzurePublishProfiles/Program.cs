@@ -1,16 +1,11 @@
 ﻿using DumpAzurePublishProfiles.Models;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
 using Microsoft.WindowsAzure;
 using Microsoft.WindowsAzure.Management.WebSites;
 using Microsoft.WindowsAzure.Management.WebSites.Models;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Serialization;
@@ -36,12 +31,29 @@ namespace DumpAzurePublishProfiles
 			if (args.Any())
 				path = args.First();
 
-			if (!Directory.Exists(path))
-				Directory.CreateDirectory(path);
+			string writePath = Path.Combine(path, "PublishProfiles");
+			if (!Directory.Exists(writePath))
+				Directory.CreateDirectory(writePath);
 
-			var token = GetAuthorizationHeader();
-			var cred = new TokenCloudCredentials(
-			  ConfigurationManager.AppSettings["subscriptionId"], token);
+			//Find .publishprofile file
+			var publishProfile = Directory.GetFiles(path, "*.publishsettings").FirstOrDefault();
+			if (publishProfile == null)
+			{
+				Console.WriteLine("No .publishsettings file found. Please download it here http://go.microsoft.com/fwlink/?LinkID=301775 and place it in the current directory.");
+				return;
+			}
+
+			var pubProfileText = File.ReadAllText(publishProfile);
+			PublishSettingsFile file = new PublishSettingsFile(pubProfileText);
+			if (file.Subscriptions == null || !file.Subscriptions.Any())
+			{
+				Console.WriteLine("No subscriptions found in PublishSettingsFile");
+				return;
+			}
+			if (file.Subscriptions.Count() > 1)
+				Console.WriteLine("Multiple Subscriptions found, using the first: " + file.Subscriptions.First().Name);
+
+			var cred = file.Subscriptions.First().GetCredentials();
 
 			var client = new WebSiteManagementClient(cred);
 
@@ -61,9 +73,9 @@ namespace DumpAzurePublishProfiles
 					PublishData publishData = new PublishData();
 					publishData.PublishProfile = profiles.Select(ToPublishProfile).ToList();
 
-					var filePath = Path.Combine(path, website.Name + ".PublishSettings");
+					var filePath = Path.Combine(writePath, website.Name + ".PublishSettings");
 
-					Console.WriteLine("Writing publishsettings for: " + website.Name);
+					Console.WriteLine("Writing PublishProfile for: " + website.Name);
 
 					SerializeObject(publishData, filePath);
                 }
@@ -122,38 +134,6 @@ namespace DumpAzurePublishProfiles
 
 			return result;
         }
-
-		private static string GetAuthorizationHeader()
-		{
-			AuthenticationResult result = null;
-
-			var context = new AuthenticationContext(string.Format(
-			  ConfigurationManager.AppSettings["login"],
-			  ConfigurationManager.AppSettings["tenantId"]));
-
-			var thread = new Thread(() =>
-			{
-				result = context.AcquireToken(
-				  ConfigurationManager.AppSettings["apiEndpoint"],
-				  ConfigurationManager.AppSettings["clientId"],
-				  new Uri(ConfigurationManager.AppSettings["redirectUri"]));
-			});
-
-			thread.SetApartmentState(ApartmentState.STA);
-			thread.Name = "AquireTokenThread";
-			thread.Start();
-			thread.Join();
-
-			if (result == null)
-			{
-				throw new InvalidOperationException("Failed to obtain the JWT token");
-			}
-
-			string token = result.AccessToken;
-			return token;
-		}
-
-
 
 	}
 }

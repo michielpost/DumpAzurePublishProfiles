@@ -2,6 +2,6 @@
 
 This tool downloads all the publishprofiles for your Azure Websites.
 
-Follow the instructions here for the correct configuration values in App.config:
-https://msdn.microsoft.com/en-us/library/azure/dn722415.aspx
+Download your Azure Subscription Publish Settings here: https://go.microsoft.com/fwlink/?LinkId=254432  
+Place the .publishsettings file in the same directory as DumpAzurePublishProfiles.exe
 
